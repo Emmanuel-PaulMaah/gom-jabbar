@@ -1,5 +1,5 @@
 
-# gom jabbar — 3d rig & blendshape inspector
+# gom jabbar
 
 lightweight web tool for inspecting 3d model rigging, skeletons, blendshapes, & animation clips. built with three.js. zero build step. open in browser, drag in a model, & it just works.
 
@@ -64,5 +64,4 @@ lightweight web tool for inspecting 3d model rigging, skeletons, blendshapes, & 
 
 ## license
 
-mit. do whatever. credit if you feel like it.
-```
+do whatever. give credit to the padishah emperor.
