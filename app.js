@@ -7,6 +7,34 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { createProceduralController } from './animations.js';
 
+// onscreen console mirror without recursion
+const logPanel = document.getElementById('logPanel');
+const origLog = window.console.log.bind(window.console);
+
+function safeStr(v) {
+  try { return typeof v === 'string' ? v : JSON.stringify(v); }
+  catch { return String(v); }
+}
+function appendToPanel(args) {
+  if (!logPanel) return;
+  const line = document.createElement('div');
+  line.textContent = args.map(safeStr).join(' ');
+  logPanel.appendChild(line);
+  logPanel.scrollTop = logPanel.scrollHeight;
+}
+
+// mirror default console.log, but never call console.log from inside
+window.console.log = (...args) => {
+  origLog(...args);
+  appendToPanel(args);
+};
+
+// helper for tagged logs you want to see clearly
+function uiLog(...args) {
+  origLog('[gom-jabbar]', ...args);
+  appendToPanel(['[gom-jabbar]', ...args]);
+}
+
 // ui refs
 const ui = Object.fromEntries(['meshCount','skinnedCount','boneCount','animCount','morphMeshCount','weightedPct','avgInf','maxInf','status','statusChips','bonesTree','morphControls','anims','procSelect','procPlay','procStop']
   .map(id=>[id,document.getElementById(id)]));
@@ -189,8 +217,24 @@ function onGenericLoaded(root, clips, label) {
   const report = inspectModel(pivot);
   renderReport(report, label, clips);
   fitCameraToObject(pivot, 1.3);
-  proc.reset(); // reset procedural baseline for new model
-}
+
+  // reset procedural baseline & refresg=h availability for this rig
+  proc.reset();
+  const sel = document.getElementById('procSelect');
+  proc.refreshAvailability(sel);
+
+  // log which options are enabled/disabled
+  if (logPanel) logPanel.innerHTML = ''; // clear old logs
+
+  // show model + motion availability
+  uiLog('model loaded:', label);
+  const tableData = Array.from(sel.options).map(o => ({
+    motion: o.value,
+    disabled: o.disabled
+  }));
+  uiLog('available motions:', JSON.stringify(tableData, null, 2));
+  }
+
 
 function inspectModel(root) {
   let meshCount = 0, skinnedCount = 0;
@@ -364,7 +408,16 @@ document.getElementById('panel').addEventListener('touchmove', e=>{ e.stopPropag
 
 // procedural ui
 ui.procPlay.addEventListener('click', ()=>{
-  if (!loadedRoot) { ui.status.innerText = 'load a model first.'; return; }
-  proc.play(ui.procSelect.value);
+  if (!loadedRoot) {
+    ui.status.innerText = 'load a model first.';
+    return;
+  }
+  const key = ui.procSelect.value;
+  const ok = proc.play(key);
+  uiLog('play:', key, ok ? '✓' : 'x (unsupported)');
 });
-ui.procStop.addEventListener('click', ()=> proc.stop());
+
+ui.procStop.addEventListener('click', ()=>{
+  uiLog('stop');
+  proc.stop();
+});
