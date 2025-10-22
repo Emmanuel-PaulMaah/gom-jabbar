@@ -76,6 +76,10 @@
       <div class="grid"><div>vertices with weights</div><div id="weightedPct">-</div></div>
       <div class="grid"><div>avg influences/vertex</div><div id="avgInf">-</div></div>
       <div class="grid"><div>max influences observed</div><div id="maxInf">-</div></div>
+      <div class="row kv">
+      <button id="exportReport">export report (.json)</button>
+      <button id="exportTxt">export (.txt)</button>
+      </div>
     </fieldset>
 
     <fieldset id="bonesBox">
@@ -98,23 +102,25 @@
       <div class="grid">
         <label for="procSelect">choose motion</label>
         <select id="procSelect">
-          <optgroup label="listening / conversational">
-            <option value="listeningIdle">listening idle</option>
+          <optgroup label="idle">
+            <option value="idleCalm">calm idle</option>
+            <option value="idleAlertShift">alert idle shift</option>
           </optgroup>
-          <optgroup label="relaxed / idle loops">
-            <option value="breathingLoop">breathing loop</option>
+          <optgroup label="head/eyes">
+            <option value="curiousScan">curious scan</option>
+            <option value="nodBlink">nod + blink</option>
           </optgroup>
-          <optgroup label="posture dynamics">
-            <option value="weightShift">idle weight shift</option>
+          <optgroup label="upper-body gestures">
+            <option value="explainRight">one-hand explainer (R)</option>
+            <option value="welcomeOpen">two-hand welcome</option>
           </optgroup>
-          <optgroup label="engaged / conversational energy">
-            <option value="eyebrowRaise">eyebrow raise</option>
+          <optgroup label="stance">
+            <option value="weightTransfer">weight transfer L↔R</option>
+            <option value="leanIn">lean-in emphasis</option>
           </optgroup>
-          <optgroup label="emotional tone idles">
-            <option value="relaxedCalm">relaxed / calm</option>
-          </optgroup>
-          <optgroup label="stylized / expressive">
-            <option value="eyeDarts">eye dart micro-motions</option>
+          <optgroup label="face">
+            <option value="speechLoop">speech loop</option>
+            <option value="smileToSmirk">smile → smirk</option>
           </optgroup>
         </select>
       </div>
@@ -125,11 +131,11 @@
     </fieldset>
 
     <div class="mono warn">notes: external urls must allow cors. draco-compressed glb supported. ktx2 textures require browser gpu support.</div>
+
+    <div id="logPanel" class="mono" style="height:120px; overflow-y:auto; background:#0b0f14; border-top:1px solid #1f2937; padding:6px; font-size:11px;"></div>
+
   </div>
 </div>
-
-<div id="logPanel" class="mono" style="height:120px; overflow-y:auto; background:#0b0f14; border-top:1px solid #1f2937; padding:6px; font-size:11px;"></div>
-
 
 <footer aria-hidden="true">the gom jabbar slices through mesh without a blade. it sees bones before they move. it sees faces before they’re ever made — paulmaah i</footer>
 

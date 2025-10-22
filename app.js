@@ -36,7 +36,7 @@ function uiLog(...args) {
 }
 
 // ui refs
-const ui = Object.fromEntries(['meshCount','skinnedCount','boneCount','animCount','morphMeshCount','weightedPct','avgInf','maxInf','status','statusChips','bonesTree','morphControls','anims','procSelect','procPlay','procStop']
+const ui = Object.fromEntries(['meshCount','skinnedCount','boneCount','animCount','morphMeshCount','weightedPct','avgInf','maxInf','status','statusChips','bonesTree','morphControls','anims','procSelect','procPlay','procStop', 'exportReport','exportTxt']
   .map(id=>[id,document.getElementById(id)]));
 const fileInput = document.getElementById('file');
 const urlInput = document.getElementById('url');
@@ -65,6 +65,8 @@ let mixer = null;
 let loadedRoot = null;
 let currentClips = [];
 let morphTargets = []; // [{mesh, dict, influences}]
+
+let sourceLabel = '(unknown)';
 
 // sizing
 function resize() {
@@ -214,7 +216,7 @@ function onGenericLoaded(root, clips, label) {
 
   if (clips?.length) mixer = new THREE.AnimationMixer(pivot);
 
-  const report = inspectModel(pivot);
+  const report = inspectModel(pivot); sourceLabel = label;
   renderReport(report, label, clips);
   fitCameraToObject(pivot, 1.3);
 
@@ -376,6 +378,138 @@ function chip(text, cls) {
   const el = document.createElement('div'); el.className = 'chip ' + (cls||''); el.textContent = text; return el;
 }
 
+function download(filename, text, mime='application/json') {
+  const blob = new Blob([text], { type: mime });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(a.href);
+  a.remove();
+}
+
+function buildFullReport() {
+  if (!loadedRoot) return { error: 'no model loaded' };
+
+  // bounds
+  const box = new THREE.Box3().setFromObject(loadedRoot);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const diag = size.length();
+
+  // heuristic unit hint
+  let unitHint = 'unknown';
+  if (diag > 0.2 && diag < 10) unitHint = 'likely meters';
+  else if (diag >= 20 && diag < 1000) unitHint = 'likely centimeters';
+
+  // meshes, materials, textures
+  const meshes = [];
+  const materials = new Set();
+  const textures = new Set();
+
+  loadedRoot.traverse(o => {
+    if (o.isMesh || o.isSkinnedMesh) {
+      const geom = o.geometry;
+      const pos = geom?.getAttribute?.('position');
+      const vcount = pos?.count ?? 0;
+      const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+      const matNames = mats.map(m => m?.name || m?.type || 'Material');
+
+      mats.forEach(m => {
+        if (!m) return;
+        materials.add(m.name || m.type || 'Material');
+        for (const k in m) if (m[k]?.isTexture) {
+          const t = m[k];
+          const id = `${k}:${t.image?.src || t.image?.currentSrc || t.name || 'texture'}`;
+          textures.add(id);
+        }
+      });
+
+      let morphs = [];
+      if (o.morphTargetDictionary && o.morphTargetInfluences) {
+        const dict = o.morphTargetDictionary;
+        morphs = Object.keys(dict);
+      }
+
+      meshes.push({
+        name: o.name || '(unnamed)',
+        type: o.isSkinnedMesh ? 'SkinnedMesh' : 'Mesh',
+        vertices: vcount,
+        skinned: !!o.isSkinnedMesh,
+        materialCount: matNames.length,
+        materials: matNames,
+        morphTargets: morphs
+      });
+    }
+  });
+
+  // skeletons and bones
+  const skeletons = [];
+  const seenSkels = new Set();
+  loadedRoot.traverse(o => {
+    if (o.isSkinnedMesh && o.skeleton && !seenSkels.has(o.skeleton)) {
+      seenSkels.add(o.skeleton);
+      const bones = o.skeleton.bones.map(b => b.name || '(unnamed)');
+      skeletons.push({
+        mesh: o.name || '(skinned-mesh)',
+        boneCount: o.skeleton.bones.length,
+        bones
+      });
+    }
+  });
+
+  // animations
+  const animations = (currentClips || []).map(c => ({
+    name: c.name || '(clip)',
+    durationSec: Number(c.duration?.toFixed?.(3) ?? c.duration),
+    tracks: c.tracks?.length ?? 0
+  }));
+
+  // core inspector stats you already compute
+  const core = inspectModel(loadedRoot);
+
+  // renderer info
+  const rinfo = renderer.info;
+  const env = {
+    threeRevision: THREE.REVISION,
+    memory: { geometries: rinfo.memory.geometries, textures: rinfo.memory.textures },
+    programs: rinfo.programs?.length ?? undefined
+  };
+
+  return {
+    source: sourceLabel,
+    bounds: {
+      size: { x: +size.x.toFixed(5), y: +size.y.toFixed(5), z: +size.z.toFixed(5) },
+      center: { x: +center.x.toFixed(5), y: +center.y.toFixed(5), z: +center.z.toFixed(5) },
+      diagonal: +diag.toFixed(5),
+      unitHint
+    },
+    summary: {
+      meshes: core.meshCount,
+      skinnedMeshes: core.skinnedCount,
+      totalBones: core.boneCount,
+      morphSets: core.morphMeshCount,
+      verticesWithWeightsPct: core.weightedPct,
+      avgInfluencesPerVertex: core.avgInf,
+      maxInfluencesObserved: core.maxInfluences,
+      animationClips: animations.length
+    },
+    boneTree: core.bonesTree,
+    meshes,
+    skeletons,
+    animations,
+    materials: Array.from(materials),
+    textures: Array.from(textures),
+    environment: env,
+    notes: [
+      'external urls must allow CORS',
+      'draco-compressed glb supported',
+      'ktx2 textures require gpu support'
+    ]
+  };
+}
+
 function fitCameraToObject(obj, padding = 1.3) {
   const box = new THREE.Box3().setFromObject(obj);
   const size = new THREE.Vector3(); box.getSize(size);
@@ -421,3 +555,34 @@ ui.procStop.addEventListener('click', ()=>{
   uiLog('stop');
   proc.stop();
 });
+
+// export buttons
+ui.exportReport?.addEventListener('click', () => {
+  const data = buildFullReport();
+  const label = (sourceLabel || 'model').replace(/[^\w.-]+/g,'_');
+  download(`gom-jabbar-report-${label}.json`, JSON.stringify(data, null, 2), 'application/json');
+});
+
+ui.exportTxt?.addEventListener('click', () => {
+  const data = buildFullReport();
+  const label = (sourceLabel || 'model').replace(/[^\w.-]+/g,'_');
+  const lines = [];
+  lines.push(`# gom jabbar report — ${data.source}`);
+  lines.push(`bounds size: ${data.bounds.size.x} x ${data.bounds.size.y} x ${data.bounds.size.z} (${data.bounds.unitHint})`);
+  lines.push(`meshes: ${data.summary.meshes}, skinned: ${data.summary.skinnedMeshes}, bones: ${data.summary.totalBones}, clips: ${data.summary.animationClips}`);
+  lines.push(`weights: ${data.summary.verticesWithWeightsPct}, avg inf/vert: ${data.summary.avgInfluencesPerVertex}, max inf: ${data.summary.maxInfluencesObserved}`);
+  lines.push(`\n== materials ==\n${data.materials.join('\n')}`);
+  lines.push(`\n== textures ==\n${data.textures.join('\n')}`);
+  lines.push(`\n== bone tree ==\n${data.boneTree}`);
+  lines.push(`\n== meshes ==`);
+  data.meshes.forEach(m=>{
+    lines.push(`- ${m.name} [${m.type}] vtx:${m.vertices} mats:${m.materialCount} morphs:${m.morphTargets.length}`);
+    if (m.morphTargets.length) lines.push(`  morphs: ${m.morphTargets.join(', ')}`);
+  });
+  lines.push(`\n== animations ==`);
+  data.animations.forEach(c=>{
+    lines.push(`- ${c.name} dur:${c.durationSec}s tracks:${c.tracks}`);
+  });
+  download(`gom-jabbar-report-${label}.txt`, lines.join('\n'), 'text/plain');
+});
+
